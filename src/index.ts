@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
   Tool
 } from '@modelcontextprotocol/sdk/types.js';
-import { logger, errorResponse, McpError } from './common/index.js';
+import { logger, errorResponse, McpError, loadJenkinsEnv, CliArgs } from './common/index.js';
 import { JenkinsClient } from './lib/jenkins-client.js';
 import { getJobStatus } from './tools/get-job-status.js';
 import { getBuildStatus } from './tools/get-build-status.js';
@@ -442,6 +442,85 @@ const toolHandlers: Record<string, ToolHandler> = {
   'jenkins_get_plugins': getPlugins
 };
 
+// Parse CLI arguments
+const parseCliArgs = (): CliArgs => {
+  const args: CliArgs = {};
+  const argv = process.argv.slice(2);
+  
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const nextArg = argv[i + 1];
+    
+    switch (arg) {
+      case '--url':
+        if (nextArg && !nextArg.startsWith('--')) {
+          args.jenkinsUrl = nextArg;
+          i++;
+        }
+        break;
+      case '--user':
+        if (nextArg && !nextArg.startsWith('--')) {
+          args.jenkinsUser = nextArg;
+          i++;
+        }
+        break;
+      case '--api-token':
+        if (nextArg && !nextArg.startsWith('--')) {
+          args.jenkinsApiToken = nextArg;
+          i++;
+        }
+        break;
+      case '--bearer-token':
+        if (nextArg && !nextArg.startsWith('--')) {
+          args.jenkinsBearerToken = nextArg;
+          i++;
+        }
+        break;
+      case '--help':
+      case '-h':
+        console.log(`
+Jenkins MCP Server
+
+Usage: mcp-jenkins [OPTIONS]
+
+Configuration Priority (highest to lowest):
+  1. CLI arguments (--url, --user, etc.)
+  2. MCP_JENKINS_* environment variables
+  3. JENKINS_* environment variables
+
+Options:
+  --url <url>            Jenkins server URL
+  --user <username>      Jenkins username (for Basic auth)
+  --api-token <token>    Jenkins API token (for Basic auth)
+  --bearer-token <token> Jenkins bearer token (OAuth/token auth)
+  -h, --help             Show this help message
+
+Authentication:
+  Either provide --bearer-token OR both --user and --api-token
+
+Examples:
+  # Bearer token auth (via CLI)
+  mcp-jenkins --url https://jenkins.example.com --bearer-token abc123
+
+  # Basic auth (via CLI)
+  mcp-jenkins --url https://jenkins.example.com --user admin --api-token xyz789
+
+  # Mixed (CLI + env vars)
+  JENKINS_USER=admin mcp-jenkins --url https://jenkins.example.com --api-token xyz789
+
+  # Environment variables only
+  JENKINS_URL=https://jenkins.example.com \\
+  JENKINS_BEARER_TOKEN=abc123 \\
+  mcp-jenkins
+`);
+        process.exit(0);
+        break;
+    }
+  }
+  
+  return args;
+};
+
 // Create MCP server instance
 const server = new Server(
   {
@@ -455,13 +534,22 @@ const server = new Server(
   }
 );
 
-// Create Jenkins client (uses environment variables)
+// Parse CLI args and create Jenkins client
+const cliArgs = parseCliArgs();
 let client: JenkinsClient;
 try {
+  const env = loadJenkinsEnv(cliArgs);
   client = new JenkinsClient();
   logger.info('Jenkins client initialized', {
-    url: process.env.JENKINS_URL,
-    authType: process.env.JENKINS_BEARER_TOKEN ? 'bearer' : 'basic'
+    url: env.JENKINS_URL,
+    authType: env.JENKINS_BEARER_TOKEN ? 'bearer' : 'basic',
+    configSources: {
+      url: cliArgs.jenkinsUrl ? 'cli' : (process.env.MCP_JENKINS_URL ? 'MCP_JENKINS_URL' : 'JENKINS_URL'),
+      auth: cliArgs.jenkinsBearerToken ? 'cli-bearer' : 
+            cliArgs.jenkinsUser ? 'cli-basic' : 
+            (process.env.MCP_JENKINS_BEARER_TOKEN ? 'MCP_JENKINS_BEARER_TOKEN' : 
+             process.env.MCP_JENKINS_USER ? 'MCP_JENKINS_*' : 'JENKINS_*')
+    }
   });
 } catch (error: any) {
   logger.error('Failed to initialize Jenkins client', { error: error.message });

@@ -26,7 +26,7 @@ export class JenkinsClient {
       this.baseUrl = credentials.baseUrl;
       this.authHeader = credentials.authHeader;
     } else {
-      // Fall back to environment variables
+      // loadJenkinsEnv will use globally set values from CLI args or env vars
       const env = loadJenkinsEnv();
       this.baseUrl = env.JENKINS_URL;
 

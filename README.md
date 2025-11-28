@@ -27,6 +27,7 @@
 ## 🌟 Features
 
 - **🔐 Flexible Authentication** - Bearer tokens, Basic auth, OAuth support
+- **⚙️ Flexible Configuration** - CLI args, MCP_JENKINS_*, or JENKINS_* env vars (priority-based)
 - **🛠️ 25+ Tools** - Complete Jenkins API coverage
 - **⚡ Modern Stack** - TypeScript 5.3+, ES2023, Native Fetch API
 - **📦 MCP Protocol** - Native integration with Claude Desktop, Claude Code CLI
@@ -63,9 +64,26 @@ npm install
 npm run build
 ```
 
+### Configuration Priority
+
+The server supports **3 ways** to provide configuration (highest to lowest priority):
+
+1. **CLI arguments** - `--url`, `--user`, `--api-token`, `--bearer-token`
+2. **MCP_JENKINS_*** environment variables - `MCP_JENKINS_URL`, `MCP_JENKINS_USER`, etc.
+3. **JENKINS_*** environment variables - `JENKINS_URL`, `JENKINS_USER`, etc.
+
 ### Quick Setup Example (Claude CLI)
 
-**If installed via npm:**
+**Using CLI arguments (recommended for AI assistants like Copilot):**
+```bash
+claude mcp add --transport stdio --scope user jenkins \
+  -- npx --yes @kud/mcp-jenkins@latest \
+  --url https://your-jenkins.com \
+  --user your_username \
+  --api-token your_token
+```
+
+**Using environment variables:**
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
   --env JENKINS_URL=https://your-jenkins.com \
@@ -77,10 +95,10 @@ claude mcp add --transport stdio --scope user jenkins \
 **If installed locally:**
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
-  --env JENKINS_URL=https://your-jenkins.com \
-  --env JENKINS_USER=your_username \
-  --env JENKINS_API_TOKEN=your_token \
-  -- node ~/path/to/mcp-jenkins/dist/index.js
+  -- node ~/path/to/mcp-jenkins/dist/index.js \
+  --url https://your-jenkins.com \
+  --user your_username \
+  --api-token your_token
 ```
 
 ✅ Done! Now you can use Jenkins commands in your AI assistant.
@@ -112,7 +130,16 @@ Choose your development environment:
 
 Add the Jenkins MCP server to Claude CLI:
 
-**Via npm (recommended):**
+**Via npm with CLI args (recommended):**
+```bash
+claude mcp add --transport stdio --scope user jenkins \
+  -- npx --yes @kud/mcp-jenkins@latest \
+  --url https://pipeline.yourcompany.com \
+  --user your_username \
+  --api-token your_api_token
+```
+
+**Via npm with env vars:**
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
   --env JENKINS_URL=https://pipeline.yourcompany.com \
@@ -121,13 +148,13 @@ claude mcp add --transport stdio --scope user jenkins \
   -- npx --yes @kud/mcp-jenkins@latest
 ```
 
-**Local installation:**
+**Local installation with CLI args:**
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
-  --env JENKINS_URL=https://pipeline.yourcompany.com \
-  --env JENKINS_USER=your_username \
-  --env JENKINS_API_TOKEN=your_api_token \
-  -- node $HOME/path/to/mcp-jenkins/dist/index.js
+  -- node $HOME/path/to/mcp-jenkins/dist/index.js \
+  --url https://pipeline.yourcompany.com \
+  --user your_username \
+  --api-token your_api_token
 ```
 
 Verify: `claude mcp list` should show `jenkins`
@@ -175,7 +202,24 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
 
 #### 2. Add Configuration
 
-**Via npm (recommended):**
+**Via npm with CLI args (recommended):**
+```json
+{
+  "mcpServers": {
+    "jenkins": {
+      "command": "npx",
+      "args": [
+        "--yes", "@kud/mcp-jenkins@latest",
+        "--url", "https://pipeline.yourcompany.com",
+        "--user", "your_username",
+        "--api-token", "your_api_token"
+      ]
+    }
+  }
+}
+```
+
+**Via npm with env vars:**
 ```json
 {
   "mcpServers": {
@@ -192,18 +236,34 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
 }
 ```
 
-**Local installation:**
+**Local installation with CLI args:**
 ```json
 {
   "mcpServers": {
     "jenkins": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-jenkins/dist/index.js"],
-      "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
-      }
+      "args": [
+        "/absolute/path/to/mcp-jenkins/dist/index.js",
+        "--url", "https://pipeline.yourcompany.com",
+        "--user", "your_username",
+        "--api-token", "your_api_token"
+      ]
+    }
+  }
+}
+```
+
+**Bearer token example:**
+```json
+{
+  "mcpServers": {
+    "jenkins": {
+      "command": "npx",
+      "args": [
+        "--yes", "@kud/mcp-jenkins@latest",
+        "--url", "https://pipeline.yourcompany.com",
+        "--bearer-token", "your_bearer_token"
+      ]
     }
   }
 }
@@ -350,9 +410,29 @@ Restart Windsurf after configuration.
 
 **Note:** This is for the NEW Copilot CLI (`npm install -g @github/copilot`), not the old `gh copilot` extension.
 
-#### Option 1: Config File
+#### Option 1: Config File with CLI Args (Recommended)
 
 Create or edit `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "jenkins": {
+      "command": "npx",
+      "args": [
+        "--yes", "@kud/mcp-jenkins@latest",
+        "--url", "https://pipeline.yourcompany.com",
+        "--user", "your_username",
+        "--api-token", "your_api_token"
+      ]
+    }
+  }
+}
+```
+
+Then run: `copilot`
+
+#### Option 2: Config File with Env Vars
 
 ```json
 {
@@ -370,9 +450,7 @@ Create or edit `~/.copilot/mcp-config.json`:
 }
 ```
 
-Then run: `copilot`
-
-#### Option 2: Inline Config
+#### Option 3: Inline Config with CLI Args
 
 Pass MCP config directly via command line:
 
@@ -381,12 +459,12 @@ copilot --additional-mcp-config '{
   "mcpServers": {
     "jenkins": {
       "command": "npx",
-      "args": ["--yes", "@kud/mcp-jenkins@latest"],
-      "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
-      }
+      "args": [
+        "--yes", "@kud/mcp-jenkins@latest",
+        "--url", "https://pipeline.yourcompany.com",
+        "--user", "your_username",
+        "--api-token", "your_api_token"
+      ]
     }
   }
 }'
@@ -399,9 +477,12 @@ Or save to a file and reference it:
 copilot --additional-mcp-config @jenkins-mcp.json
 ```
 
-For local installation, use `"command": "node"` with `"args": ["/absolute/path/to/mcp-jenkins/dist/index.js"]`
+For local installation, use `"command": "node"` with path in args:
+```json
+"args": ["/absolute/path/to/mcp-jenkins/dist/index.js", "--url", "...", "--user", "...", "--api-token", "..."]
+```
 
-#### Option 3: Allow All Tools (Non-Interactive)
+#### Option 4: Allow All Tools (Non-Interactive)
 
 For scripts and automation:
 
@@ -625,6 +706,60 @@ export const myNewTool = async (client: JenkinsClient, input: MyToolInput) => {
 4. Rebuild:
 ```bash
 npm run build
+```
+
+---
+
+## ⚙️ Configuration
+
+### Priority System
+
+The server uses a **3-tier priority system** for configuration:
+
+1. **CLI Arguments** (Highest Priority)
+   - `--url <url>` - Jenkins server URL
+   - `--user <username>` - Username for Basic auth
+   - `--api-token <token>` - API token for Basic auth
+   - `--bearer-token <token>` - Bearer token for OAuth/token auth
+
+2. **MCP_JENKINS_* Environment Variables** (Medium Priority)
+   - `MCP_JENKINS_URL`
+   - `MCP_JENKINS_USER`
+   - `MCP_JENKINS_API_TOKEN`
+   - `MCP_JENKINS_BEARER_TOKEN`
+
+3. **JENKINS_* Environment Variables** (Lowest Priority)
+   - `JENKINS_URL`
+   - `JENKINS_USER`
+   - `JENKINS_API_TOKEN`
+   - `JENKINS_BEARER_TOKEN`
+
+### Why This Matters
+
+This priority system allows you to:
+- **Mix sources**: Use CLI args for URL but env vars for credentials
+- **Override easily**: CLI args always win, great for testing different servers
+- **Namespace safely**: `MCP_JENKINS_*` vars won't conflict with other Jenkins tools
+
+### Examples
+
+**All CLI args:**
+```bash
+node dist/index.js --url https://jenkins.com --user admin --api-token abc123
+```
+
+**Mixed (CLI overrides env):**
+```bash
+JENKINS_USER=dev_user node dist/index.js --url https://jenkins.com --api-token xyz789
+# Uses: URL from CLI, token from CLI, user from env
+```
+
+**All env vars with priority:**
+```bash
+JENKINS_URL=https://fallback.com \
+MCP_JENKINS_URL=https://primary.com \
+node dist/index.js
+# Uses: https://primary.com (MCP_JENKINS_* wins)
 ```
 
 ---
