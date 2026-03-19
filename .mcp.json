@@ -1,0 +1,11 @@
+{
+  "mcp-jenkins": {
+    "command": "npx",
+    "args": ["-y", "@kud/mcp-jenkins@latest"],
+    "env": {
+      "JENKINS_URL": "${JENKINS_URL}",
+      "JENKINS_USER": "${JENKINS_USER}",
+      "JENKINS_TOKEN": "${JENKINS_TOKEN}"
+    }
+  }
+}

@@ -1,38 +1,12 @@
 {
-  "id": "mcp-jenkins",
-  "name": "jenkins",
-  "displayName": "Jenkins",
-  "description": "Full Jenkins control from Claude — inspect builds, stream console logs, trigger pipelines, manage queues, and diagnose CI failures without leaving your session.",
+  "name": "mcp-jenkins",
+  "description": "Full Jenkins control from Claude — inspect builds, stream console logs, trigger pipelines, manage queues, and diagnose CI failures.",
   "version": "1.0.0",
-  "author": "kud",
-  "repository": "https://github.com/kud/mcp-jenkins",
-  "npm": "@kud/mcp-jenkins",
-  "mcpConfig": {
-    "transport": "stdio",
-    "command": "npx",
-    "args": ["-y", "@kud/mcp-jenkins@latest"],
-    "env": {
-      "JENKINS_URL": "${JENKINS_URL}",
-      "JENKINS_USER": "${JENKINS_USER}",
-      "JENKINS_TOKEN": "${JENKINS_TOKEN}"
-    }
+  "author": {
+    "name": "kud",
+    "url": "https://github.com/kud"
   },
-  "requiredEnv": [
-    {
-      "name": "JENKINS_URL",
-      "description": "Your Jenkins instance URL (e.g. https://jenkins.example.com)",
-      "required": true
-    },
-    {
-      "name": "JENKINS_USER",
-      "description": "Your Jenkins username",
-      "required": true
-    },
-    {
-      "name": "JENKINS_TOKEN",
-      "description": "Your Jenkins API token — generate one at <jenkins-url>/user/<username>/configure",
-      "required": true
-    }
-  ],
-  "skills": ["ci-diagnose", "build-watch"]
+  "homepage": "https://github.com/kud/mcp-jenkins",
+  "repository": "https://github.com/kud/mcp-jenkins",
+  "license": "MIT"
 }
