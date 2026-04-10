@@ -1,7 +1,7 @@
 {
   "mcp-jenkins": {
-    "command": "npx",
-    "args": ["-y", "@kud/mcp-jenkins@latest"],
+    "command": "node",
+    "args": ["./dist/index.js"],
     "env": {
       "JENKINS_URL": "${MCP_JENKINS_URL}",
       "JENKINS_USER": "${MCP_JENKINS_USER}",
