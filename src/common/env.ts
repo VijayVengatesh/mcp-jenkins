@@ -18,18 +18,14 @@ let cachedInstances: Map<string, JenkinsEnv> | null = null
 /**
  * Get a configuration value with priority:
  * 1. CLI argument (highest priority)
- * 2. MCP_JENKINS_* environment variable (medium priority)
- * 3. JENKINS_* environment variable (lowest priority)
+ * 2. MCP_JENKINS_* environment variable
  */
 const getConfigValue = (
   cliValue: string | undefined,
   mcpEnvKey: string,
-  jenkinsEnvKey: string,
 ): string | undefined => {
   if (cliValue !== undefined) return cliValue
-  const mcpValue = process.env[mcpEnvKey]
-  if (mcpValue !== undefined) return mcpValue
-  return process.env[jenkinsEnvKey]
+  return process.env[mcpEnvKey]
 }
 
 const splitValues = (value: string | undefined): string[] =>
@@ -48,13 +44,11 @@ const buildInstanceEnv = (
     throw new Error(
       `Missing Jenkins authentication for URL ${url}. Provide via:\n` +
         "  Bearer Token:\n" +
-        "    1. CLI: --jenkins-bearer-token <token>\n" +
+        "    1. CLI: --bearer-token <token>\n" +
         "    2. Environment: MCP_JENKINS_BEARER_TOKEN=<token>\n" +
-        "    3. Environment: JENKINS_BEARER_TOKEN=<token>\n" +
         "  OR Basic Auth:\n" +
-        "    1. CLI: --jenkins-user <user> --jenkins-api-token <token>\n" +
-        "    2. Environment: MCP_JENKINS_USER=<user> MCP_JENKINS_API_TOKEN=<token>\n" +
-        "    3. Environment: JENKINS_USER=<user> JENKINS_API_TOKEN=<token>",
+        "    1. CLI: --user <user> --api-token <token>\n" +
+        "    2. Environment: MCP_JENKINS_USER=<user> MCP_JENKINS_API_TOKEN=<token>",
     )
   }
 
@@ -69,7 +63,7 @@ const buildInstanceEnv = (
 /**
  * Load all named Jenkins instances from environment variables.
  *
- * Single instance (backwards compat):
+ * Single instance:
  *   MCP_JENKINS_URL=https://jenkins.example.com
  *   MCP_JENKINS_USER=admin
  *   MCP_JENKINS_API_TOKEN=token
@@ -87,34 +81,23 @@ export const loadAllJenkinsInstances = (
 ): Map<string, JenkinsEnv> => {
   if (cachedInstances && !cliArgs) return cachedInstances
 
-  const rawUrl = getConfigValue(
-    cliArgs?.jenkinsUrl,
-    "MCP_JENKINS_URL",
-    "JENKINS_URL",
-  )
-  const rawUser = getConfigValue(
-    cliArgs?.jenkinsUser,
-    "MCP_JENKINS_USER",
-    "JENKINS_USER",
-  )
+  const rawUrl = getConfigValue(cliArgs?.jenkinsUrl, "MCP_JENKINS_URL")
+  const rawUser = getConfigValue(cliArgs?.jenkinsUser, "MCP_JENKINS_USER")
   const rawApiToken = getConfigValue(
     cliArgs?.jenkinsApiToken,
     "MCP_JENKINS_API_TOKEN",
-    "JENKINS_API_TOKEN",
   )
   const rawBearerToken = getConfigValue(
     cliArgs?.jenkinsBearerToken,
     "MCP_JENKINS_BEARER_TOKEN",
-    "JENKINS_BEARER_TOKEN",
   )
   const rawInstances = process.env["MCP_JENKINS_INSTANCES"]
 
   if (!rawUrl) {
     throw new Error(
-      "Missing JENKINS_URL. Provide via:\n" +
-        "  1. CLI: --jenkins-url <url>\n" +
-        "  2. Environment: MCP_JENKINS_URL=<url>\n" +
-        "  3. Environment: JENKINS_URL=<url>",
+      "Missing MCP_JENKINS_URL. Provide via:\n" +
+        "  1. CLI: --url <url>\n" +
+        "  2. Environment: MCP_JENKINS_URL=<url>",
     )
   }
 
@@ -157,4 +140,30 @@ export const loadJenkinsEnv = (cliArgs?: CliArgs): JenkinsEnv => {
 export const getInstanceNames = (): string[] => {
   if (!cachedInstances) return []
   return Array.from(cachedInstances.keys())
+}
+
+export interface ToolFilter {
+  allowlist: string[] | null
+  blocklist: string[]
+}
+
+/**
+ * Load tool allow/block lists from environment variables.
+ *
+ * Allowlist (only these tools are exposed):
+ *   MCP_JENKINS_TOOLS=jenkins_list_jobs,jenkins_get_job_status
+ *
+ * Blocklist (all tools except these):
+ *   MCP_JENKINS_BLOCK_TOOLS=jenkins_delete_job,jenkins_trigger_build
+ *
+ * If both are set, allowlist takes precedence and blocklist is ignored.
+ */
+export const loadToolFilter = (): ToolFilter => {
+  const rawAllow = process.env["MCP_JENKINS_TOOLS"]
+  const rawBlock = process.env["MCP_JENKINS_BLOCK_TOOLS"]
+
+  return {
+    allowlist: rawAllow ? splitValues(rawAllow) : null,
+    blocklist: rawBlock ? splitValues(rawBlock) : [],
+  }
 }

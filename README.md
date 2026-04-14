@@ -27,7 +27,8 @@
 ## 🌟 Features
 
 - **🔐 Flexible Authentication** - Bearer tokens, Basic auth, OAuth support
-- **⚙️ Flexible Configuration** - CLI args, MCP*JENKINS*\_, or JENKINS\_\_ env vars (priority-based)
+- **⚙️ Flexible Configuration** - CLI args or `MCP_JENKINS_*` env vars (priority-based)
+- **🔒 Tool Filtering** - Allowlist or blocklist tools via `MCP_JENKINS_TOOLS` / `MCP_JENKINS_BLOCK_TOOLS`
 - **🔀 Multi-Instance Support** - Connect to multiple Jenkins servers in one MCP entry, select per tool call
 - **🛠️ 37 Tools** - Comprehensive Jenkins API coverage
 - **⚡ Modern Stack** - TypeScript 5.3+, ES2023, Native Fetch API
@@ -67,11 +68,10 @@ npm run build
 
 ### Configuration Priority
 
-The server supports **3 ways** to provide configuration (highest to lowest priority):
+The server supports **2 ways** to provide configuration (highest to lowest priority):
 
 1. **CLI arguments** - `--url`, `--user`, `--api-token`, `--bearer-token`
-2. **MCP*JENKINS*\*** environment variables - `MCP_JENKINS_URL`, `MCP_JENKINS_USER`, etc.
-3. **JENKINS\_\*** environment variables - `JENKINS_URL`, `JENKINS_USER`, etc.
+2. **`MCP_JENKINS_*` environment variables** - `MCP_JENKINS_URL`, `MCP_JENKINS_USER`, etc.
 
 ### Quick Setup Example (Claude CLI)
 
@@ -89,9 +89,9 @@ claude mcp add --transport stdio --scope user jenkins \
 
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
-  --env JENKINS_URL=https://your-jenkins.com \
-  --env JENKINS_USER=your_username \
-  --env JENKINS_API_TOKEN=your_token \
+  --env MCP_JENKINS_URL=https://your-jenkins.com \
+  --env MCP_JENKINS_USER=your_username \
+  --env MCP_JENKINS_API_TOKEN=your_token \
   -- npx --yes @kud/mcp-jenkins@latest
 ```
 
@@ -148,9 +148,9 @@ claude mcp add --transport stdio --scope user jenkins \
 
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
-  --env JENKINS_URL=https://pipeline.yourcompany.com \
-  --env JENKINS_USER=your_username \
-  --env JENKINS_API_TOKEN=your_api_token \
+  --env MCP_JENKINS_URL=https://pipeline.yourcompany.com \
+  --env MCP_JENKINS_USER=your_username \
+  --env MCP_JENKINS_API_TOKEN=your_api_token \
   -- npx --yes @kud/mcp-jenkins@latest
 ```
 
@@ -254,9 +254,9 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
       "command": "npx",
       "args": ["--yes", "@kud/mcp-jenkins@latest"],
       "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
       }
     }
   }
@@ -348,9 +348,9 @@ Settings (Cmd+, / Ctrl+,) → Search "Cline: MCP Settings" → Edit in settings.
       "command": "npx",
       "args": ["@kud/mcp-jenkins"],
       "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
       }
     }
   }
@@ -403,9 +403,9 @@ Settings (Cmd+, / Ctrl+,) → Search "MCP" → Edit Config or open `~/.cursor/mc
       "command": "npx",
       "args": ["--yes", "@kud/mcp-jenkins@latest"],
       "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
       }
     }
   }
@@ -454,9 +454,9 @@ Settings → **AI Settings** → **Model Context Protocol** → Add Server:
       "command": "npx",
       "args": ["--yes", "@kud/mcp-jenkins@latest"],
       "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
       }
     }
   }
@@ -552,9 +552,9 @@ Then run: `copilot`
       "command": "npx",
       "args": ["--yes", "@kud/mcp-jenkins@latest"],
       "env": {
-        "JENKINS_URL": "https://pipeline.yourcompany.com",
-        "JENKINS_USER": "your_username",
-        "JENKINS_API_TOKEN": "your_api_token"
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
       }
     }
   }
@@ -638,9 +638,9 @@ Settings (Cmd+, / Ctrl+,) → **Tools** → **AI Assistant** → **Model Context
 - **Arguments:** `--yes @kud/mcp-jenkins@latest`
 - **Environment Variables:**
   ```
-  JENKINS_URL=https://pipeline.yourcompany.com
-  JENKINS_USER=your_username
-  JENKINS_API_TOKEN=your_api_token
+  MCP_JENKINS_URL=https://pipeline.yourcompany.com
+  MCP_JENKINS_USER=your_username
+  MCP_JENKINS_API_TOKEN=your_api_token
   ```
 
 **Multiple Jenkins instances:** set these environment variables:
@@ -830,9 +830,9 @@ npm run inspect:dev
 ### Testing with MCP Inspector
 
 ```bash
-export JENKINS_URL=https://pipeline.yourcompany.com
-export JENKINS_USER=your_username
-export JENKINS_API_TOKEN=your_token
+export MCP_JENKINS_URL=https://pipeline.yourcompany.com
+export MCP_JENKINS_USER=your_username
+export MCP_JENKINS_API_TOKEN=your_token
 
 npm run inspect:dev
 ```
@@ -876,7 +876,7 @@ npm run build
 
 ### Priority System
 
-The server uses a **3-tier priority system** for configuration:
+The server uses a **2-tier priority system** for configuration:
 
 1. **CLI Arguments** (Highest Priority)
    - `--url <url>` - Jenkins server URL
@@ -884,17 +884,11 @@ The server uses a **3-tier priority system** for configuration:
    - `--api-token <token>` - API token for Basic auth
    - `--bearer-token <token>` - Bearer token for OAuth/token auth
 
-2. **MCP*JENKINS*\* Environment Variables** (Medium Priority)
+2. **`MCP_JENKINS_*` Environment Variables**
    - `MCP_JENKINS_URL`
    - `MCP_JENKINS_USER`
    - `MCP_JENKINS_API_TOKEN`
    - `MCP_JENKINS_BEARER_TOKEN`
-
-3. **JENKINS\_\* Environment Variables** (Lowest Priority)
-   - `JENKINS_URL`
-   - `JENKINS_USER`
-   - `JENKINS_API_TOKEN`
-   - `JENKINS_BEARER_TOKEN`
 
 ### Multiple Instances
 
@@ -936,13 +930,31 @@ The first instance is always the default — tools work without `instance` if yo
 
 ---
 
-### Why This Matters
+### Tool Filtering
 
-This priority system allows you to:
+Control which tools are exposed to the AI using an allowlist or blocklist.
 
-- **Mix sources**: Use CLI args for URL but env vars for credentials
-- **Override easily**: CLI args always win, great for testing different servers
-- **Namespace safely**: `MCP_JENKINS_*` vars won't conflict with other Jenkins tools
+**Allowlist** — expose only specific tools:
+
+```bash
+export MCP_JENKINS_TOOLS="jenkins_list_jobs,jenkins_get_job_status,jenkins_get_build_status"
+```
+
+**Blocklist** — hide specific tools (all others remain available):
+
+```bash
+export MCP_JENKINS_BLOCK_TOOLS="jenkins_delete_job,jenkins_trigger_build,jenkins_safe_restart"
+```
+
+If both are set, `MCP_JENKINS_TOOLS` takes precedence.
+
+**Read-only monitoring preset** — block all write/destructive tools:
+
+```bash
+export MCP_JENKINS_BLOCK_TOOLS="jenkins_trigger_build,jenkins_stop_build,jenkins_delete_build,jenkins_cancel_queue,jenkins_enable_job,jenkins_disable_job,jenkins_delete_job,jenkins_create_job,jenkins_update_job_config,jenkins_rename_job,jenkins_copy_job,jenkins_toggle_node_offline,jenkins_quiet_down,jenkins_cancel_quiet_down,jenkins_safe_restart,jenkins_replay_build"
+```
+
+---
 
 ### Examples
 
@@ -955,17 +967,8 @@ node dist/index.js --url https://jenkins.com --user admin --api-token abc123
 **Mixed (CLI overrides env):**
 
 ```bash
-JENKINS_USER=dev_user node dist/index.js --url https://jenkins.com --api-token xyz789
+MCP_JENKINS_USER=dev_user node dist/index.js --url https://jenkins.com --api-token xyz789
 # Uses: URL from CLI, token from CLI, user from env
-```
-
-**All env vars with priority:**
-
-```bash
-JENKINS_URL=https://fallback.com \
-MCP_JENKINS_URL=https://primary.com \
-node dist/index.js
-# Uses: https://primary.com (MCP_JENKINS_* wins)
 ```
 
 ---
@@ -995,8 +998,8 @@ Follow these steps to create an API token for the MCP server:
 
 Store the token securely - you'll need it for configuration:
 
-- For Bearer Token auth: Use it as `JENKINS_BEARER_TOKEN`
-- For Basic auth: Use it as `JENKINS_API_TOKEN` (along with `JENKINS_USER`)
+- For Bearer Token auth: Use it as `MCP_JENKINS_BEARER_TOKEN`
+- For Basic auth: Use it as `MCP_JENKINS_API_TOKEN` (along with `MCP_JENKINS_USER`)
 
 **Example token format:** `11abcd1234567890abcdef1234567890ab`
 
@@ -1007,19 +1010,19 @@ Store the token securely - you'll need it for configuration:
 **Bearer Token (Recommended):**
 
 ```bash
---env JENKINS_BEARER_TOKEN=your_token
+--env MCP_JENKINS_BEARER_TOKEN=your_token
 ```
 
 **Basic Auth:**
 
 ```bash
---env JENKINS_USER=your_username
---env JENKINS_API_TOKEN=your_token
+--env MCP_JENKINS_USER=your_username
+--env MCP_JENKINS_API_TOKEN=your_token
 ```
 
 ### OAuth Support
 
-This server forwards any `Authorization` header to Jenkins. If your Jenkins uses OAuth (via plugins), just pass the OAuth token as `JENKINS_BEARER_TOKEN`.
+This server forwards any `Authorization` header to Jenkins. If your Jenkins uses OAuth (via plugins), just pass the OAuth token as `MCP_JENKINS_BEARER_TOKEN`.
 
 ---
 

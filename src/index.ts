@@ -11,6 +11,7 @@ import {
   errorResponse,
   McpError,
   loadAllJenkinsInstances,
+  loadToolFilter,
   getInstanceNames,
   CliArgs,
 } from "./common/index.js"
@@ -610,7 +611,27 @@ const rawTools: Tool[] = [
   },
 ]
 
-const tools = rawTools.map(injectInstance)
+const { allowlist, blocklist } = loadToolFilter()
+
+if (allowlist && blocklist.length) {
+  logger.warn(
+    "Both JENKINS_TOOLS and JENKINS_BLOCK_TOOLS are set — JENKINS_BLOCK_TOOLS will be ignored",
+  )
+}
+
+const filteredRawTools = allowlist
+  ? rawTools.filter((t) => allowlist.includes(t.name))
+  : blocklist.length
+    ? rawTools.filter((t) => !blocklist.includes(t.name))
+    : rawTools
+
+if (allowlist) {
+  logger.info("Tool allowlist active", { tools: allowlist })
+} else if (blocklist.length) {
+  logger.info("Tool blocklist active", { blocked: blocklist })
+}
+
+const tools = filteredRawTools.map(injectInstance)
 
 // Map tool names to handler functions
 type ToolHandler = (client: JenkinsClient, input: any) => Promise<any>
@@ -697,7 +718,6 @@ Usage: mcp-jenkins [OPTIONS]
 Configuration Priority (highest to lowest):
   1. CLI arguments (--url, --user, etc.)
   2. MCP_JENKINS_* environment variables
-  3. JENKINS_* environment variables
 
 Options:
   --url <url>            Jenkins server URL
@@ -709,6 +729,11 @@ Options:
 Authentication:
   Either provide --bearer-token OR both --user and --api-token
 
+Tool Filtering (via environment variables):
+  MCP_JENKINS_TOOLS=<tool1>,<tool2>        Allowlist — expose only these tools
+  MCP_JENKINS_BLOCK_TOOLS=<tool1>,<tool2>  Blocklist — hide these tools
+  If both are set, MCP_JENKINS_TOOLS takes precedence.
+
 Examples:
   # Bearer token auth (via CLI)
   mcp-jenkins --url https://jenkins.example.com --bearer-token abc123
@@ -717,12 +742,20 @@ Examples:
   mcp-jenkins --url https://jenkins.example.com --user admin --api-token xyz789
 
   # Mixed (CLI + env vars)
-  JENKINS_USER=admin mcp-jenkins --url https://jenkins.example.com --api-token xyz789
+  MCP_JENKINS_USER=admin mcp-jenkins --url https://jenkins.example.com --api-token xyz789
 
   # Environment variables only
-  JENKINS_URL=https://jenkins.example.com \\
-  JENKINS_BEARER_TOKEN=abc123 \\
+  MCP_JENKINS_URL=https://jenkins.example.com \\
+  MCP_JENKINS_BEARER_TOKEN=abc123 \\
   mcp-jenkins
+
+  # Read-only monitoring (block all write tools)
+  MCP_JENKINS_BLOCK_TOOLS=jenkins_trigger_build,jenkins_stop_build,jenkins_delete_build,jenkins_cancel_queue,jenkins_enable_job,jenkins_disable_job,jenkins_delete_job,jenkins_create_job,jenkins_update_job_config,jenkins_rename_job,jenkins_copy_job,jenkins_toggle_node_offline,jenkins_quiet_down,jenkins_cancel_quiet_down,jenkins_safe_restart,jenkins_replay_build \\
+  mcp-jenkins --url https://jenkins.example.com --bearer-token abc123
+
+  # Allowlist — expose only job listing and status tools
+  MCP_JENKINS_TOOLS=jenkins_list_jobs,jenkins_get_job_status,jenkins_get_build_status \\
+  mcp-jenkins --url https://jenkins.example.com --bearer-token abc123
 `)
         process.exit(0)
         break
