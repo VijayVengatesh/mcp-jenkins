@@ -75,17 +75,7 @@ The server supports **2 ways** to provide configuration (highest to lowest prior
 
 ### Quick Setup Example (Claude CLI)
 
-**Using CLI arguments (recommended for AI assistants like Copilot):**
-
-```bash
-claude mcp add --transport stdio --scope user jenkins \
-  -- npx --yes @kud/mcp-jenkins@latest \
-  --url https://your-jenkins.com \
-  --user your_username \
-  --api-token your_token
-```
-
-**Using environment variables:**
+**Using environment variables (recommended):**
 
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
@@ -93,6 +83,16 @@ claude mcp add --transport stdio --scope user jenkins \
   --env MCP_JENKINS_USER=your_username \
   --env MCP_JENKINS_API_TOKEN=your_token \
   -- npx --yes @kud/mcp-jenkins@latest
+```
+
+**Using CLI arguments (override env vars):**
+
+```bash
+claude mcp add --transport stdio --scope user jenkins \
+  -- npx --yes @kud/mcp-jenkins@latest \
+  --url https://your-jenkins.com \
+  --user your_username \
+  --api-token your_token
 ```
 
 **If installed locally:**
@@ -134,17 +134,7 @@ Choose your development environment:
 
 Add the Jenkins MCP server to Claude CLI:
 
-**Via npm with CLI args (recommended):**
-
-```bash
-claude mcp add --transport stdio --scope user jenkins \
-  -- npx --yes @kud/mcp-jenkins@latest \
-  --url https://pipeline.yourcompany.com \
-  --user your_username \
-  --api-token your_api_token
-```
-
-**Via npm with env vars:**
+**Via npm with env vars (recommended):**
 
 ```bash
 claude mcp add --transport stdio --scope user jenkins \
@@ -152,6 +142,16 @@ claude mcp add --transport stdio --scope user jenkins \
   --env MCP_JENKINS_USER=your_username \
   --env MCP_JENKINS_API_TOKEN=your_api_token \
   -- npx --yes @kud/mcp-jenkins@latest
+```
+
+**Via npm with CLI args:**
+
+```bash
+claude mcp add --transport stdio --scope user jenkins \
+  -- npx --yes @kud/mcp-jenkins@latest \
+  --url https://pipeline.yourcompany.com \
+  --user your_username \
+  --api-token your_api_token
 ```
 
 **Local installation with CLI args:**
@@ -223,7 +223,25 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
 
 #### 2. Add Configuration
 
-**Via npm with CLI args (recommended):**
+**Via npm with env vars (recommended):**
+
+```json
+{
+  "mcpServers": {
+    "jenkins": {
+      "command": "npx",
+      "args": ["--yes", "@kud/mcp-jenkins@latest"],
+      "env": {
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
+      }
+    }
+  }
+}
+```
+
+**Via npm with CLI args:**
 
 ```json
 {
@@ -240,24 +258,6 @@ notepad %APPDATA%\Claude\claude_desktop_config.json
         "--api-token",
         "your_api_token"
       ]
-    }
-  }
-}
-```
-
-**Via npm with env vars:**
-
-```json
-{
-  "mcpServers": {
-    "jenkins": {
-      "command": "npx",
-      "args": ["--yes", "@kud/mcp-jenkins@latest"],
-      "env": {
-        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
-        "MCP_JENKINS_USER": "your_username",
-        "MCP_JENKINS_API_TOKEN": "your_api_token"
-      }
     }
   }
 }
@@ -517,9 +517,29 @@ Restart Windsurf after configuration.
 
 **Note:** This is for the NEW Copilot CLI (`npm install -g @github/copilot`), not the old `gh copilot` extension.
 
-#### Option 1: Config File with CLI Args (Recommended)
+#### Option 1: Config File with Env Vars (Recommended)
 
 Create or edit `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "jenkins": {
+      "command": "npx",
+      "args": ["--yes", "@kud/mcp-jenkins@latest"],
+      "env": {
+        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
+        "MCP_JENKINS_USER": "your_username",
+        "MCP_JENKINS_API_TOKEN": "your_api_token"
+      }
+    }
+  }
+}
+```
+
+Then run: `copilot`
+
+#### Option 2: Config File with CLI Args
 
 ```json
 {
@@ -536,26 +556,6 @@ Create or edit `~/.copilot/mcp-config.json`:
         "--api-token",
         "your_api_token"
       ]
-    }
-  }
-}
-```
-
-Then run: `copilot`
-
-#### Option 2: Config File with Env Vars
-
-```json
-{
-  "mcpServers": {
-    "jenkins": {
-      "command": "npx",
-      "args": ["--yes", "@kud/mcp-jenkins@latest"],
-      "env": {
-        "MCP_JENKINS_URL": "https://pipeline.yourcompany.com",
-        "MCP_JENKINS_USER": "your_username",
-        "MCP_JENKINS_API_TOKEN": "your_api_token"
-      }
     }
   }
 }
