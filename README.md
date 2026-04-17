@@ -60,7 +60,7 @@ npx --yes @kud/mcp-jenkins@latest
 **Option 2: Local installation:**
 
 ```bash
-git clone https://github.com/yourusername/mcp-jenkins.git
+git clone https://github.com/kud/mcp-jenkins.git
 cd mcp-jenkins
 npm install
 npm run build
@@ -1114,8 +1114,8 @@ MIT License - see [LICENSE](LICENSE) file
 
 ## 📮 Support
 
-- 🐛 **Issues:** [GitHub Issues](https://github.com/yourusername/mcp-jenkins/issues)
-- 💬 **Discussions:** [GitHub Discussions](https://github.com/yourusername/mcp-jenkins/discussions)
+- 🐛 **Issues:** [GitHub Issues](https://github.com/kud/mcp-jenkins/issues)
+- 💬 **Discussions:** [GitHub Discussions](https://github.com/kud/mcp-jenkins/discussions)
 
 ---
 
