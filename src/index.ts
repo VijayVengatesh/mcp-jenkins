@@ -17,6 +17,7 @@ import {
 } from "./common/index.js"
 import { JenkinsClient } from "./lib/jenkins-client.js"
 import { getJobStatus } from "./tools/get-job-status.js"
+import { getJobParameters } from "./tools/get-job-parameters.js"
 import { getBuildStatus } from "./tools/get-build-status.js"
 import { getConsoleLog } from "./tools/get-console-log.js"
 import { triggerBuild } from "./tools/trigger-build.js"
@@ -107,6 +108,21 @@ const rawTools: Tool[] = [
   {
     name: "jenkins_get_job_status",
     description: "Get the status of the last build for a specific job",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_get_job_parameters",
+    description:
+      "Get the parameter definitions for a parameterised Jenkins job — names, types, defaults, and choices",
     inputSchema: {
       type: "object",
       properties: {
@@ -639,6 +655,7 @@ const toolHandlers: Record<string, ToolHandler> = {
   jenkins_list_jobs: listJobs,
   jenkins_search_jobs: searchJobs,
   jenkins_get_job_status: getJobStatus,
+  jenkins_get_job_parameters: getJobParameters,
   jenkins_get_build_status: getBuildStatus,
   jenkins_get_recent_builds: getRecentBuilds,
   jenkins_get_console_log: getConsoleLog,

@@ -464,6 +464,50 @@ export class JenkinsClient {
     }
   }
 
+  // Get parameter definitions for a parameterised job
+  async getJobParameters(jobName: string): Promise<{
+    jobName: string
+    parameters: {
+      name: string
+      type: string
+      description: string
+      defaultValue: any
+      choices?: string[]
+    }[]
+  }> {
+    try {
+      const data = await httpGetJson<any>(
+        `${this.baseUrl}/job/${jobPath(jobName)}/api/json?tree=property[parameterDefinitions[name,type,description,defaultParameterValue[value],choices]]`,
+        { headers: this.headers() },
+      )
+      const paramProp = (data.property ?? []).find(
+        (p: any) =>
+          p._class === "hudson.model.ParametersDefinitionProperty" ||
+          Array.isArray(p.parameterDefinitions),
+      )
+      const defs: any[] = paramProp?.parameterDefinitions ?? []
+      const parameters = defs.map((d: any) => {
+        const raw: string = d.type ?? d._class ?? ""
+        const type = raw
+          .replace(/^.*\./, "")
+          .replace(/ParameterDefinition$/, "")
+          .toLowerCase()
+        const entry: ReturnType<typeof Object.assign> = {
+          name: d.name ?? "",
+          type,
+          description: d.description ?? "",
+          defaultValue: d.defaultParameterValue?.value ?? null,
+        }
+        if (Array.isArray(d.choices)) entry.choices = d.choices
+        return entry
+      })
+      return { jobName, parameters }
+    } catch (e: any) {
+      if (e.message?.includes("HTTP 404")) throw Errors.jobNotFound(jobName)
+      throw e
+    }
+  }
+
   // List nodes/agents
   async listNodes(): Promise<any[]> {
     try {
