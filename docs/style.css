@@ -338,8 +338,11 @@ a:hover {
   transition: var(--trans);
   opacity: 0;
 }
-.code-block:hover .copy-btn,
+.code-block:hover .copy-btn {
+  opacity: 1;
+}
 .hero-command .copy-btn {
+  position: static;
   opacity: 1;
 }
 .copy-btn:hover {
