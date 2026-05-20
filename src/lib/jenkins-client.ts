@@ -840,6 +840,7 @@ export class JenkinsClient {
   async replayBuild(
     jobName: string,
     buildNumber: number,
+    mainScript?: string,
   ): Promise<{
     jobName: string
     buildNumber: number
@@ -849,16 +850,19 @@ export class JenkinsClient {
     const headers: Record<string, string> = this.headers()
     if (crumb) headers[crumb.crumbRequestField] = crumb.crumb
 
-    try {
-      const res = await httpPost(
-        `${this.baseUrl}/job/${jobPath(jobName)}/${buildNumber}/replay/rebuild`,
-        { headers },
-      )
-      return { jobName, buildNumber, queueUrl: res.headers["location"] || null }
-    } catch (e: any) {
-      if (e.message?.includes("HTTP 404")) throw Errors.jobNotFound(jobName)
-      throw e
+    const init: RequestInit & { timeoutMs?: number } = { headers }
+    if (mainScript !== undefined) {
+      headers["Content-Type"] = "application/x-www-form-urlencoded"
+      init.body = new URLSearchParams({ mainScript }).toString()
     }
+    const res = await httpPost(
+      `${this.baseUrl}/job/${jobPath(jobName)}/${buildNumber}/replay/rebuild`,
+      init,
+    )
+    if (res.status === 404) throw Errors.jobNotFound(jobName)
+    if (res.status >= 400)
+      throw Errors.unexpected(`Replay failed with status ${res.status}`)
+    return { jobName, buildNumber, queueUrl: res.headers["location"] || null }
   }
 }
 
