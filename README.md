@@ -30,6 +30,7 @@
 - **⚙️ Flexible Configuration** - CLI args or `MCP_JENKINS_*` env vars (priority-based)
 - **🔒 Tool Filtering** - Allowlist or blocklist tools via `MCP_JENKINS_ALLOW_TOOLS` / `MCP_JENKINS_BLOCK_TOOLS`
 - **🔀 Multi-Instance Support** - Connect to multiple Jenkins servers in one MCP entry, select per tool call
+- **🌐 Transport Modes** - Run over stdio or HTTP
 - **🛠️ 37 Tools** - Comprehensive Jenkins API coverage
 - **⚡ Modern Stack** - TypeScript 5.3+, ES2023, Native Fetch API
 - **📦 MCP Protocol** - Native integration with Claude Desktop, Claude Code CLI
@@ -72,6 +73,23 @@ The server supports **2 ways** to provide configuration (highest to lowest prior
 
 1. **CLI arguments** - `--url`, `--user`, `--api-token`, `--bearer-token`
 2. **`MCP_JENKINS_*` environment variables** - `MCP_JENKINS_URL`, `MCP_JENKINS_USER`, etc.
+
+### HTTP Server
+
+If you want to run the MCP server over HTTP instead of stdio, start it with:
+
+```bash
+node dist/index.js \
+  --transport http \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --path /mcp \
+  --url https://your-jenkins.com \
+  --user your_username \
+  --api-token your_token
+```
+
+The `/mcp` endpoint uses Streamable HTTP.
 
 ### Quick Setup Example (Claude CLI)
 
@@ -1082,7 +1100,7 @@ claude mcp get jenkins
 - **Runtime:** Node.js 20+
 - **Language:** TypeScript 5.3+
 - **Target:** ES2023
-- **Protocol:** MCP 1.0 (stdio transport)
+- **Protocol:** MCP 1.0 (stdio + HTTP transports)
 - **HTTP Client:** Native Fetch API
 - **Module System:** ESM
 
