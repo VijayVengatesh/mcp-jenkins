@@ -26,6 +26,7 @@
           <li><a href="#quickstart">Quickstart</a></li>
           <li><a href="#tools">Tools</a></li>
           <li><a href="#config">Config</a></li>
+          <li><a href="#transport">Transport</a></li>
         </ul>
         <a
           href="https://github.com/kud/mcp-jenkins"
@@ -591,6 +592,83 @@ jenkins_create_job,jenkins_update_job_config,jenkins_rename_job,jenkins_copy_job
 jenkins_toggle_node_offline,jenkins_quiet_down,jenkins_cancel_quiet_down,\
 jenkins_safe_restart,jenkins_replay_build</pre>
           <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Transport -->
+    <section id="transport">
+      <div class="section-inner">
+        <span class="section-eyebrow reveal">Transport</span>
+        <h2 class="reveal">stdio &amp; HTTP modes</h2>
+        <p class="section-sub reveal">
+          The server runs over <strong>stdio</strong> by default. Use
+          <code>--transport http</code> to run as an HTTP server using the
+          Streamable HTTP transport.
+        </p>
+
+        <div class="code-block reveal">
+          <pre><span class="comment"># HTTP server (loopback-only by default)</span>
+<span class="cmd">mcp-jenkins</span> --transport http --host 127.0.0.1 --port 3000 \
+  --path /mcp --url https://your-jenkins.com \
+  --bearer-token your_token</pre>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+
+        <h3
+          style="font-size: 1.05rem; font-weight: 600; margin: 40px 0 16px"
+          class="reveal"
+        >
+          Security
+        </h3>
+        <p class="reveal" style="max-width: 720px; line-height: 1.7">
+          The <code>/mcp</code> endpoint has no built-in authentication — any
+          client that can reach the port gets full Jenkins access with the
+          operator's stored credentials. The server binds to
+          <code>127.0.0.1</code> (loopback only) by default. Do not expose it
+          to untrusted networks without a reverse proxy that provides
+          authentication. Use <code>--allow-remote</code> to confirm you
+          understand this when binding to a non-loopback address.
+        </p>
+
+        <h3
+          style="font-size: 1.05rem; font-weight: 600; margin: 40px 0 16px"
+          class="reveal"
+        >
+          Environment variables
+        </h3>
+        <div class="config-wrap reveal">
+          <table>
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="config-key">MCP_JENKINS_TRANSPORT</span></td>
+                <td><span class="config-default">stdio</span></td>
+                <td>Transport mode: <code>stdio</code> or <code>http</code></td>
+              </tr>
+              <tr>
+                <td><span class="config-key">MCP_JENKINS_PORT</span></td>
+                <td><span class="config-default">3000</span></td>
+                <td>HTTP server port</td>
+              </tr>
+              <tr>
+                <td><span class="config-key">MCP_JENKINS_HOST</span></td>
+                <td><span class="config-default">127.0.0.1</span></td>
+                <td>HTTP bind address (loopback only; use <code>--allow-remote</code> for other addresses)</td>
+              </tr>
+              <tr>
+                <td><span class="config-key">MCP_JENKINS_PATH</span></td>
+                <td><span class="config-default">/mcp</span></td>
+                <td>MCP endpoint path</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto"
+import http from "node:http"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
@@ -52,25 +53,6 @@ import { getView } from "./tools/get-view.js"
 import { quietDown } from "./tools/quiet-down.js"
 import { cancelQuietDown } from "./tools/cancel-quiet-down.js"
 import { safeRestart } from "./tools/safe-restart.js"
-
-const instanceProperty = {
-  instance: {
-    type: "string",
-    description:
-      "Jenkins instance name (optional — defaults to first configured instance)",
-  },
-}
-
-const injectInstance = (tool: Tool): Tool => ({
-  ...tool,
-  inputSchema: {
-    ...tool.inputSchema,
-    properties: {
-      ...instanceProperty,
-      ...(tool.inputSchema.properties as object),
-    },
-  },
-})
 
 const schemaFromJson = (schema: any): z.ZodTypeAny => {
   if (!schema || typeof schema !== "object") return z.unknown()
@@ -704,8 +686,6 @@ if (allowlist) {
   logger.info("Tool blocklist active", { blocked: blocklist })
 }
 
-const tools = filteredRawTools.map(injectInstance)
-
 // Map tool names to handler functions
 type ToolHandler = (client: JenkinsClient, input: any) => Promise<any>
 const toolHandlers: Record<string, ToolHandler> = {
@@ -796,6 +776,10 @@ const parseCliArgs = (): CliArgs => {
               `Invalid transport "${nextArg}". Expected one of: stdio, http`,
             )
           }
+        } else if (nextArg?.startsWith("--") || !nextArg) {
+          throw new Error(
+            "--transport requires a value: stdio or http",
+          )
         }
         break
       case "--port":
@@ -820,6 +804,9 @@ const parseCliArgs = (): CliArgs => {
           i++
         }
         break
+      case "--allow-remote":
+        args.allowRemote = true
+        break
       case "--help":
       case "-h":
         console.log(`
@@ -837,15 +824,24 @@ Options:
   --api-token <token>    Jenkins API token (for Basic auth)
   --bearer-token <token> Jenkins bearer token (OAuth/token auth)
   --anonymous            No-auth Jenkins instance (no credentials required)
-  --transport <mode>      stdio (default) or http
-  --port <port>           HTTP port when using --transport http
-  --host <host>           HTTP host when using --transport http
-  --path <path>           MCP HTTP path (default: /mcp)
-  -h, --help             Show this help message
+  --transport <mode>       stdio (default) or http
+  --port <port>            HTTP port when using --transport http (default: 3000)
+  --host <host>            HTTP bind address when using --transport http (default: 127.0.0.1)
+  --path <path>            MCP HTTP path when using --transport http (default: /mcp)
+  --allow-remote           Allow binding to a non-loopback address (⚠️ no built-in auth)
+  -h, --help              Show this help message
 
 Authentication:
   Either provide --bearer-token OR both --user and --api-token
   OR use --anonymous for Jenkins instances with no authentication
+
+Security (HTTP transport):
+  The /mcp endpoint has no built-in authentication — anything that can reach
+  the port gets full Jenkins access with the operator's stored credentials.
+  By default the server binds to 127.0.0.1 (loopback only).
+  Do not expose the endpoint to untrusted networks without a reverse-proxy
+  that provides authentication. Use --allow-remote to confirm you understand
+  this when binding to a non-loopback address.
 
 Tool Filtering (via environment variables):
   MCP_JENKINS_ALLOW_TOOLS=<tool1>,<tool2>  Allowlist — expose only these tools
@@ -963,6 +959,15 @@ const getHttpConfig = () => {
 
   const host = cliArgs.host ?? process.env["MCP_JENKINS_HOST"] ?? "127.0.0.1"
   const path = cliArgs.path ?? process.env["MCP_JENKINS_PATH"] ?? "/mcp"
+
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !cliArgs.allowRemote) {
+    throw new Error(
+      `Refusing to bind to non-loopback address "${host}". ` +
+      "The /mcp endpoint has no built-in authentication. " +
+      "Use --allow-remote to confirm you understand the security implications, " +
+      "or bind to 127.0.0.1 (the default) and put a reverse-proxy with auth in front.",
+    )
+  }
 
   return {
     host,
@@ -1116,6 +1121,7 @@ async function startHttpServer() {
   const { host, port, path } = getHttpConfig()
   const app = createMcpExpressApp({ host })
   const sessions = new Map<string, HttpSession>()
+  const shuttingDown = { current: false }
 
   app.all(path, async (req, res) => {
     try {
@@ -1135,7 +1141,16 @@ async function startHttpServer() {
     }
   })
 
-  app.listen(port, host, () => {
+  const server = app.listen(port, host) as unknown as http.Server
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      logger.error(`Port ${port} is already in use — choose a different port with --port`)
+    } else {
+      logger.error("Failed to start HTTP server", { error: err.message })
+    }
+    process.exit(1)
+  })
+  server.on("listening", () => {
     logger.info("Jenkins MCP server running on HTTP", {
       host,
       port,
@@ -1143,6 +1158,26 @@ async function startHttpServer() {
       protocol: "streamable-http",
     })
   })
+
+  const shutdown = async () => {
+    if (shuttingDown.current) return
+    shuttingDown.current = true
+    logger.info("Shutting down HTTP server...")
+    for (const [sid] of sessions) {
+      sessions.delete(sid)
+    }
+    server.close(() => {
+      logger.info("HTTP server closed")
+      process.exit(0)
+    })
+    setTimeout(() => {
+      logger.error("Forced shutdown after timeout")
+      process.exit(1)
+    }, 10_000).unref()
+  }
+
+  process.on("SIGINT", shutdown)
+  process.on("SIGTERM", shutdown)
 }
 
 async function main() {

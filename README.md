@@ -76,20 +76,11 @@ The server supports **2 ways** to provide configuration (highest to lowest prior
 
 ### HTTP Server
 
-If you want to run the MCP server over HTTP instead of stdio, start it with:
+The server can run in HTTP mode using Streamable HTTP. See [transport docs](docs/#transport) for details and security caveats.
 
 ```bash
-node dist/index.js \
-  --transport http \
-  --host 127.0.0.1 \
-  --port 3000 \
-  --path /mcp \
-  --url https://your-jenkins.com \
-  --user your_username \
-  --api-token your_token
+node dist/index.js --transport http --port 3000 --url https://your-jenkins.com --user your_username --api-token your_token
 ```
-
-The `/mcp` endpoint uses Streamable HTTP.
 
 ### Quick Setup Example (Claude CLI)
 
