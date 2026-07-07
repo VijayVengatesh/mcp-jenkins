@@ -16,6 +16,7 @@ export interface CliArgs {
   port?: number
   host?: string
   path?: string
+  allowRemote?: boolean
 }
 
 // Store resolved configs globally to avoid re-parsing

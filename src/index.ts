@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto"
+import http from "node:http"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
@@ -53,26 +54,617 @@ import { quietDown } from "./tools/quiet-down.js"
 import { cancelQuietDown } from "./tools/cancel-quiet-down.js"
 import { safeRestart } from "./tools/safe-restart.js"
 
-const instanceProperty = {
-  instance: {
-    type: "string",
-    description:
-      "Jenkins instance name (optional — defaults to first configured instance)",
-  },
+const schemaFromJson = (schema: any): z.ZodTypeAny => {
+  if (!schema || typeof schema !== "object") return z.unknown()
+
+  if (
+    schema.type === "string" &&
+    Array.isArray(schema.enum) &&
+    schema.enum.every((value: unknown) => typeof value === "string") &&
+    schema.enum.length > 0
+  ) {
+    return z.enum(schema.enum as [string, ...string[]])
+  }
+
+  switch (schema.type) {
+    case "string":
+      return z.string()
+    case "number":
+      return z.number()
+    case "integer":
+      return z.number().int()
+    case "boolean":
+      return z.boolean()
+    case "object": {
+      const properties = schema.properties ?? {}
+      const required = new Set<string>(schema.required ?? [])
+      const shape: Record<string, z.ZodTypeAny> = {}
+      for (const [key, value] of Object.entries(properties)) {
+        const child = schemaFromJson(value)
+        shape[key] = required.has(key) ? child : child.optional()
+      }
+      return z.object(shape).passthrough()
+    }
+    default:
+      return z.unknown()
+  }
 }
 
-const injectInstance = (tool: Tool): Tool => ({
-  ...tool,
-  inputSchema: {
-    ...tool.inputSchema,
-    properties: {
-      ...instanceProperty,
-      ...(tool.inputSchema.properties as object),
+const buildToolInputSchema = (toolSchema: Tool["inputSchema"]): z.ZodTypeAny => {
+  const rawSchema = toolSchema as any
+  const properties = rawSchema?.properties ?? {}
+  const required = new Set<string>(rawSchema?.required ?? [])
+  const shape: Record<string, z.ZodTypeAny> = {
+    instance: z.string().optional(),
+  }
+
+  for (const [key, value] of Object.entries(properties)) {
+    const child = schemaFromJson(value)
+    shape[key] = required.has(key) ? child : child.optional()
+  }
+
+  return z.object(shape).passthrough()
+}
+
+// Tool definitions with proper MCP schema
+const rawTools: Tool[] = [
+  {
+    name: "jenkins_list_instances",
+    description:
+      "List all configured Jenkins instances with their names and URLs",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "jenkins_list_jobs",
+    description: "List all Jenkins jobs with their names and URLs",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
     },
   },
-})
-
-import { rawTools } from "./tool-manifest.js"
+  {
+    name: "jenkins_search_jobs",
+    description:
+      "Search for Jenkins jobs by name (case-insensitive substring match)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query to filter jobs by name",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "jenkins_get_job_status",
+    description: "Get the status of the last build for a specific job",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_get_job_parameters",
+    description:
+      "Get the parameter definitions for a parameterised Jenkins job — names, types, defaults, and choices",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_get_build_status",
+    description: "Get detailed status of a specific build number for a job",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number to retrieve",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_get_recent_builds",
+    description: "Get recent builds for a job with their status and metadata",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of builds to return (default: 5)",
+          default: 5,
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_get_console_log",
+    description:
+      "Get console log output from a build. Returns both a snippet and full log.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number (optional, defaults to last build)",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_trigger_build",
+    description: "Trigger a new build for a job, optionally with parameters",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job to trigger",
+        },
+        params: {
+          type: "object",
+          description: "Optional build parameters as key-value pairs",
+          additionalProperties: true,
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_list_artifacts",
+    description: "List all artifacts produced by a specific build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_get_artifact",
+    description:
+      "Download a specific artifact from a build (returns base64-encoded content)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number",
+        },
+        relativePath: {
+          type: "string",
+          description: 'Relative path to the artifact (e.g., "dist/app.jar")',
+        },
+      },
+      required: ["jobName", "buildNumber", "relativePath"],
+    },
+  },
+  {
+    name: "jenkins_stop_build",
+    description: "Stop/abort a running build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number to stop",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_delete_build",
+    description: "Delete a specific build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number to delete",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_get_test_results",
+    description: "Get test results for a build (pass/fail counts, test suites)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_get_build_changes",
+    description: "Get Git commits/changes for a build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_get_pipeline_stages",
+    description: "Get pipeline stages and their status for a build",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_replay_build",
+    description:
+      "Replay/rerun a pipeline build, optionally with a modified pipeline script",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+        buildNumber: {
+          type: "number",
+          description: "Build number to replay",
+        },
+        mainScript: {
+          type: "string",
+          description:
+            "Optional Groovy pipeline script to use instead of the original. When omitted, the original build script is replayed unchanged.",
+        },
+      },
+      required: ["jobName", "buildNumber"],
+    },
+  },
+  {
+    name: "jenkins_get_queue",
+    description: "Get the current build queue showing pending builds",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_cancel_queue",
+    description: "Cancel a queued build by queue ID",
+    inputSchema: {
+      type: "object",
+      properties: {
+        queueId: {
+          type: "number",
+          description: "Queue item ID to cancel",
+        },
+      },
+      required: ["queueId"],
+    },
+  },
+  {
+    name: "jenkins_enable_job",
+    description: "Enable a disabled job",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_disable_job",
+    description: "Disable a job to prevent it from running",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_delete_job",
+    description: "Permanently delete a job (WARNING: cannot be undone)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_get_job_config",
+    description: "Get job configuration XML",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: {
+          type: "string",
+          description: "Name of the Jenkins job",
+        },
+      },
+      required: ["jobName"],
+    },
+  },
+  {
+    name: "jenkins_list_nodes",
+    description: "List all Jenkins nodes/agents and their status",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_get_system_info",
+    description: "Get Jenkins system information",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_get_version",
+    description: "Get Jenkins version",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_get_plugins",
+    description: "List all installed Jenkins plugins",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_create_job",
+    description: "Create a new Jenkins job from an XML configuration",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: { type: "string", description: "Name for the new job" },
+        configXml: {
+          type: "string",
+          description: "Jenkins job XML configuration",
+        },
+      },
+      required: ["jobName", "configXml"],
+    },
+  },
+  {
+    name: "jenkins_update_job_config",
+    description: "Update an existing job's XML configuration",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: { type: "string", description: "Name of the Jenkins job" },
+        configXml: {
+          type: "string",
+          description: "New Jenkins job XML configuration",
+        },
+      },
+      required: ["jobName", "configXml"],
+    },
+  },
+  {
+    name: "jenkins_rename_job",
+    description: "Rename a Jenkins job",
+    inputSchema: {
+      type: "object",
+      properties: {
+        jobName: { type: "string", description: "Current job name" },
+        newName: { type: "string", description: "New job name" },
+      },
+      required: ["jobName", "newName"],
+    },
+  },
+  {
+    name: "jenkins_copy_job",
+    description: "Copy/duplicate a Jenkins job under a new name",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fromName: {
+          type: "string",
+          description: "Source job name to copy from",
+        },
+        newName: { type: "string", description: "Name for the new job copy" },
+      },
+      required: ["fromName", "newName"],
+    },
+  },
+  {
+    name: "jenkins_get_node",
+    description: "Get detailed information about a specific Jenkins node/agent",
+    inputSchema: {
+      type: "object",
+      properties: {
+        nodeName: {
+          type: "string",
+          description:
+            "Node/agent name (use 'master' or 'Built-In Node' for the controller)",
+        },
+      },
+      required: ["nodeName"],
+    },
+  },
+  {
+    name: "jenkins_toggle_node_offline",
+    description: "Toggle a Jenkins node/agent between online and offline",
+    inputSchema: {
+      type: "object",
+      properties: {
+        nodeName: { type: "string", description: "Node/agent name" },
+        offlineMessage: {
+          type: "string",
+          description: "Optional reason for taking the node offline",
+        },
+      },
+      required: ["nodeName"],
+    },
+  },
+  {
+    name: "jenkins_list_views",
+    description: "List all Jenkins views with their jobs",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_get_view",
+    description: "Get details and job list for a specific Jenkins view",
+    inputSchema: {
+      type: "object",
+      properties: {
+        viewName: { type: "string", description: "Name of the Jenkins view" },
+      },
+      required: ["viewName"],
+    },
+  },
+  {
+    name: "jenkins_quiet_down",
+    description:
+      "Put Jenkins into quiet mode — no new builds will start until cancelled (requires confirm: true)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          description: "Optional reason for quiet mode",
+        },
+        confirm: {
+          type: "boolean",
+          description: "Must be true to proceed",
+          default: false,
+        },
+      },
+      required: ["confirm"],
+    },
+  },
+  {
+    name: "jenkins_cancel_quiet_down",
+    description: "Cancel Jenkins quiet mode and resume accepting new builds",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "jenkins_safe_restart",
+    description:
+      "Safely restart Jenkins — waits for running builds to finish before restarting (requires confirm: true)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        confirm: {
+          type: "boolean",
+          description: "Must be true to proceed",
+          default: false,
+        },
+      },
+      required: ["confirm"],
+    },
+  },
+]
 
 const { allowlist, blocklist } = loadToolFilter()
 
@@ -93,8 +685,6 @@ if (allowlist) {
 } else if (blocklist.length) {
   logger.info("Tool blocklist active", { blocked: blocklist })
 }
-
-const tools = filteredRawTools.map(injectInstance)
 
 // Map tool names to handler functions
 type ToolHandler = (client: JenkinsClient, input: any) => Promise<any>
@@ -186,6 +776,10 @@ const parseCliArgs = (): CliArgs => {
               `Invalid transport "${nextArg}". Expected one of: stdio, http`,
             )
           }
+        } else if (nextArg?.startsWith("--") || !nextArg) {
+          throw new Error(
+            "--transport requires a value: stdio or http",
+          )
         }
         break
       case "--port":
@@ -210,6 +804,9 @@ const parseCliArgs = (): CliArgs => {
           i++
         }
         break
+      case "--allow-remote":
+        args.allowRemote = true
+        break
       case "--help":
       case "-h":
         console.log(`
@@ -227,15 +824,24 @@ Options:
   --api-token <token>    Jenkins API token (for Basic auth)
   --bearer-token <token> Jenkins bearer token (OAuth/token auth)
   --anonymous            No-auth Jenkins instance (no credentials required)
-  --transport <mode>      stdio (default) or http
-  --port <port>           HTTP port when using --transport http
-  --host <host>           HTTP host when using --transport http
-  --path <path>           MCP HTTP path (default: /mcp)
-  -h, --help             Show this help message
+  --transport <mode>       stdio (default) or http
+  --port <port>            HTTP port when using --transport http (default: 3000)
+  --host <host>            HTTP bind address when using --transport http (default: 127.0.0.1)
+  --path <path>            MCP HTTP path when using --transport http (default: /mcp)
+  --allow-remote           Allow binding to a non-loopback address (⚠️ no built-in auth)
+  -h, --help              Show this help message
 
 Authentication:
   Either provide --bearer-token OR both --user and --api-token
   OR use --anonymous for Jenkins instances with no authentication
+
+Security (HTTP transport):
+  The /mcp endpoint has no built-in authentication — anything that can reach
+  the port gets full Jenkins access with the operator's stored credentials.
+  By default the server binds to 127.0.0.1 (loopback only).
+  Do not expose the endpoint to untrusted networks without a reverse-proxy
+  that provides authentication. Use --allow-remote to confirm you understand
+  this when binding to a non-loopback address.
 
 Tool Filtering (via environment variables):
   MCP_JENKINS_ALLOW_TOOLS=<tool1>,<tool2>  Allowlist — expose only these tools
@@ -353,6 +959,15 @@ const getHttpConfig = () => {
 
   const host = cliArgs.host ?? process.env["MCP_JENKINS_HOST"] ?? "127.0.0.1"
   const path = cliArgs.path ?? process.env["MCP_JENKINS_PATH"] ?? "/mcp"
+
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1" && !cliArgs.allowRemote) {
+    throw new Error(
+      `Refusing to bind to non-loopback address "${host}". ` +
+      "The /mcp endpoint has no built-in authentication. " +
+      "Use --allow-remote to confirm you understand the security implications, " +
+      "or bind to 127.0.0.1 (the default) and put a reverse-proxy with auth in front.",
+    )
+  }
 
   return {
     host,
@@ -506,6 +1121,7 @@ async function startHttpServer() {
   const { host, port, path } = getHttpConfig()
   const app = createMcpExpressApp({ host })
   const sessions = new Map<string, HttpSession>()
+  const shuttingDown = { current: false }
 
   app.all(path, async (req, res) => {
     try {
@@ -525,7 +1141,16 @@ async function startHttpServer() {
     }
   })
 
-  app.listen(port, host, () => {
+  const server = app.listen(port, host) as unknown as http.Server
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      logger.error(`Port ${port} is already in use — choose a different port with --port`)
+    } else {
+      logger.error("Failed to start HTTP server", { error: err.message })
+    }
+    process.exit(1)
+  })
+  server.on("listening", () => {
     logger.info("Jenkins MCP server running on HTTP", {
       host,
       port,
@@ -533,6 +1158,26 @@ async function startHttpServer() {
       protocol: "streamable-http",
     })
   })
+
+  const shutdown = async () => {
+    if (shuttingDown.current) return
+    shuttingDown.current = true
+    logger.info("Shutting down HTTP server...")
+    for (const [sid] of sessions) {
+      sessions.delete(sid)
+    }
+    server.close(() => {
+      logger.info("HTTP server closed")
+      process.exit(0)
+    })
+    setTimeout(() => {
+      logger.error("Forced shutdown after timeout")
+      process.exit(1)
+    }, 10_000).unref()
+  }
+
+  process.on("SIGINT", shutdown)
+  process.on("SIGTERM", shutdown)
 }
 
 async function main() {
