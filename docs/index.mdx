@@ -1,0 +1,95 @@
+---
+title: 👋 Introduction
+description: A Jenkins MCP server with 38 tools for managing jobs, builds, and CI/CD workflows
+---
+
+A Jenkins MCP server with **38 tools** for managing jobs, builds, nodes, views, and
+CI/CD workflows, with native integration for Claude Desktop and the Claude Code CLI.
+
+## ✨ Features
+
+- **🔐 Flexible Authentication** - Bearer tokens, Basic auth, OAuth support
+- **⚙️ Flexible Configuration** - CLI args or `MCP_JENKINS_*` env vars (priority-based)
+- **🔒 Tool Filtering** - Allowlist or blocklist tools via `MCP_JENKINS_ALLOW_TOOLS` / `MCP_JENKINS_BLOCK_TOOLS`
+- **🔀 Multi-Instance Support** - Connect to multiple Jenkins servers in one MCP entry, select per tool call
+- **🛠️ 38 Tools** - Comprehensive Jenkins API coverage
+- **⚡ Modern Stack** - TypeScript 5.3+, ES2023, Native Fetch API
+- **📦 MCP Protocol** - Native integration with Claude Desktop, Claude Code CLI
+- **🔄 Real-time Monitoring** - Build status, queue management, pipeline stages
+- **🧪 Test Results** - View test pass/fail counts and suites
+- **🎯 Job Control** - Enable/disable, trigger, stop, replay builds
+- **📊 System Info** - Nodes, plugins, version info
+- **🔍 Debug Tools** - MCP inspector for testing
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- A Jenkins API token (see [Authentication](/projects/mcp-jenkins/docs/authentication))
+
+### Install
+
+```bash
+claude mcp add --transport stdio --scope user jenkins \
+  --env MCP_JENKINS_URL=https://your-jenkins.com \
+  --env MCP_JENKINS_USER=your_username \
+  --env MCP_JENKINS_API_TOKEN=your_token \
+  -- npx --yes @kud/mcp-jenkins@latest
+```
+
+✅ Done! Now you can use Jenkins commands in your AI assistant.
+
+For per-client setup (Claude Desktop, Cursor, VSCode, JetBrains, and more), see the
+[Installation](/projects/mcp-jenkins/docs/installation) guide.
+
+## 💬 Example Conversations
+
+Once configured, interact with Jenkins naturally:
+
+```
+You: "List all my Jenkins jobs"
+AI: *Shows list of all jobs*
+
+You: "What's the status of the 'api-backend' build?"
+AI: *Shows latest build status, duration, result*
+
+You: "Get the test results for build #42 of 'mobile-pipeline'"
+AI: *Shows pass/fail counts, test suites*
+
+You: "Show me the pipeline stages for that failed build"
+AI: *Shows which stage failed and durations*
+
+You: "Trigger a build for 'deploy-staging' with VERSION=2.1.0"
+AI: *Triggers build with parameters*
+
+You: "Stop build #966 of 'mobile-pipeline'"
+AI: *Stops the running build*
+
+You: "Show me the queue"
+AI: *Lists all pending builds*
+
+You: "What version of Jenkins are we running?"
+AI: *Shows Jenkins version*
+```
+
+## 📚 Documentation
+
+- [Installation](/projects/mcp-jenkins/docs/installation) - Per-client setup guides
+- [Tools](/projects/mcp-jenkins/docs/tools) - Full reference for all 38 tools
+- [Configuration](/projects/mcp-jenkins/docs/configuration) - Priority system, multi-instance, tool filtering
+- [Authentication](/projects/mcp-jenkins/docs/authentication) - Getting and using a Jenkins API token
+- [Troubleshooting](/projects/mcp-jenkins/docs/troubleshooting) - Common issues and fixes
+
+## 📊 Tech Stack
+
+- **Runtime:** Node.js 20+
+- **Language:** TypeScript 5.3+
+- **Target:** ES2023
+- **Protocol:** MCP 1.0 (stdio transport)
+- **HTTP Client:** Native Fetch API
+- **Module System:** ESM
+
+## 📄 License
+
+MIT License - see the [LICENSE](https://github.com/kud/mcp-jenkins/blob/main/LICENSE) file.
