@@ -1,18 +1,17 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { randomUUID } from "node:crypto"
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js"
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js"
+import { isInitializeRequest, Tool } from "@modelcontextprotocol/sdk/types.js"
+import * as z from "zod/v4"
+import type { Request, Response } from "express"
 import {
   logger,
-  errorResponse,
   McpError,
   loadAllJenkinsInstances,
   loadToolFilter,
-  getInstanceNames,
   CliArgs,
 } from "./common/index.js"
 import { JenkinsClient } from "./lib/jenkins-client.js"
@@ -176,6 +175,41 @@ const parseCliArgs = (): CliArgs => {
       case "--anonymous":
         args.jenkinsAnonymous = true
         break
+      case "--transport":
+        if (nextArg && !nextArg.startsWith("--")) {
+          const transport = nextArg.toLowerCase()
+          if (transport === "stdio" || transport === "http") {
+            args.transport = transport
+            i++
+          } else {
+            throw new Error(
+              `Invalid transport "${nextArg}". Expected one of: stdio, http`,
+            )
+          }
+        }
+        break
+      case "--port":
+        if (nextArg && !nextArg.startsWith("--")) {
+          const port = Number(nextArg)
+          if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+            throw new Error(`Invalid port "${nextArg}". Expected a number from 1 to 65535`)
+          }
+          args.port = port
+          i++
+        }
+        break
+      case "--host":
+        if (nextArg && !nextArg.startsWith("--")) {
+          args.host = nextArg
+          i++
+        }
+        break
+      case "--path":
+        if (nextArg && !nextArg.startsWith("--")) {
+          args.path = nextArg.startsWith("/") ? nextArg : `/${nextArg}`
+          i++
+        }
+        break
       case "--help":
       case "-h":
         console.log(`
@@ -193,6 +227,10 @@ Options:
   --api-token <token>    Jenkins API token (for Basic auth)
   --bearer-token <token> Jenkins bearer token (OAuth/token auth)
   --anonymous            No-auth Jenkins instance (no credentials required)
+  --transport <mode>      stdio (default) or http
+  --port <port>           HTTP port when using --transport http
+  --host <host>           HTTP host when using --transport http
+  --path <path>           MCP HTTP path (default: /mcp)
   -h, --help             Show this help message
 
 Authentication:
@@ -226,6 +264,9 @@ Examples:
   # Allowlist — expose only job listing and status tools
   MCP_JENKINS_ALLOW_TOOLS=jenkins_list_jobs,jenkins_get_job_status,jenkins_get_build_status \\
   mcp-jenkins --url https://jenkins.example.com --bearer-token abc123
+
+  # HTTP server
+  mcp-jenkins --transport http --host 127.0.0.1 --port 3000 --url https://jenkins.example.com --bearer-token abc123
 `)
         process.exit(0)
         break
@@ -234,19 +275,6 @@ Examples:
 
   return args
 }
-
-// Create MCP server instance
-const server = new Server(
-  {
-    name: "jenkins-mcp-server",
-    version: "0.9.1",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  },
-)
 
 // Parse CLI args and build per-instance client map
 const cliArgs = parseCliArgs()
@@ -292,79 +320,230 @@ const resolveClient = (instance?: string): JenkinsClient => {
       "INVALID_PARAMS",
       `Unknown instance "${name}". Available: ${Array.from(clients.keys()).join(", ")}`,
       400,
-    )
+  )
   return c
 }
 
-// Handle tool list requests
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools }
-})
+type TransportMode = "stdio" | "http"
 
-// Handle tool execution requests
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params
+type HttpSession = {
+  server: McpServer
+  transport: StreamableHTTPServerTransport
+}
 
-  try {
-    if (name === "jenkins_list_instances") {
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              Array.from(clients.entries()).map(([instanceName, c]) => ({
-                name: instanceName,
-                url: c.baseUrl,
-              })),
-              null,
-              2,
-            ),
-          },
-        ],
-      }
-    }
+const getTransportMode = (): TransportMode => {
+  const rawMode =
+    cliArgs.transport ?? (process.env["MCP_JENKINS_TRANSPORT"] || "stdio")
+  const mode = rawMode.toLowerCase()
+  if (mode === "stdio" || mode === "http") return mode
 
-    const handler = toolHandlers[name]
-    if (!handler) {
-      throw new McpError("TOOL_NOT_FOUND", `Unknown tool: ${name}`, 404)
-    }
+  throw new Error(
+    `Invalid MCP transport "${rawMode}". Expected one of: stdio, http`,
+  )
+}
 
-    const { instance, ...toolArgs } = (args || {}) as Record<string, any>
-    const client = resolveClient(instance)
-    const result = await handler(client, toolArgs)
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    }
-  } catch (error: any) {
-    logger.error("Tool execution failed", {
-      tool: name,
-      error: error.message,
-      code: error.code,
-    })
-
-    if (error instanceof McpError) {
-      throw error
-    }
-
-    throw new McpError(
-      "EXECUTION_ERROR",
-      error.message || "Tool execution failed",
-      500,
+const getHttpConfig = () => {
+  const rawPort =
+    cliArgs.port ?? Number(process.env["MCP_JENKINS_PORT"] ?? "3000")
+  if (!Number.isInteger(rawPort) || rawPort <= 0 || rawPort > 65535) {
+    throw new Error(
+      `Invalid HTTP port "${String(rawPort)}". Expected a number from 1 to 65535`,
     )
   }
-})
 
-// Start the server with stdio transport
-async function main() {
+  const host = cliArgs.host ?? process.env["MCP_JENKINS_HOST"] ?? "127.0.0.1"
+  const path = cliArgs.path ?? process.env["MCP_JENKINS_PATH"] ?? "/mcp"
+
+  return {
+    host,
+    port: rawPort,
+    path: path.startsWith("/") ? path : `/${path}`,
+  }
+}
+
+const createMcpServer = (): McpServer => {
+  const server = new McpServer(
+    {
+      name: "jenkins-mcp-server",
+      version: "0.9.1",
+    },
+    {
+      capabilities: {},
+    },
+  )
+
+  for (const tool of filteredRawTools) {
+    const inputSchema = buildToolInputSchema(tool.inputSchema)
+
+    server.registerTool(
+      tool.name,
+      {
+        description: tool.description,
+        inputSchema,
+      },
+      async (args) => {
+        try {
+          if (tool.name === "jenkins_list_instances") {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    Array.from(clients.entries()).map(([instanceName, c]) => ({
+                      name: instanceName,
+                      url: c.baseUrl,
+                    })),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            }
+          }
+
+          const handler = toolHandlers[tool.name]
+          if (!handler) {
+            throw new McpError("TOOL_NOT_FOUND", `Unknown tool: ${tool.name}`, 404)
+          }
+
+          const { instance, ...toolArgs } = (args || {}) as Record<string, any>
+          const client = resolveClient(instance)
+          const result = await handler(client, toolArgs)
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          }
+        } catch (error: any) {
+          logger.error("Tool execution failed", {
+            tool: tool.name,
+            error: error.message,
+            code: error.code,
+          })
+
+          if (error instanceof McpError) {
+            throw error
+          }
+
+          throw new McpError(
+            "EXECUTION_ERROR",
+            error.message || "Tool execution failed",
+            500,
+          )
+        }
+      },
+    )
+  }
+
+  return server
+}
+
+const createHttpSession = (sessions: Map<string, HttpSession>): HttpSession => {
+  const server = createMcpServer()
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (sessionId) => {
+      sessions.set(sessionId, { server, transport })
+    },
+  })
+
+  transport.onclose = () => {
+    const sid = transport.sessionId
+    if (sid) {
+      sessions.delete(sid)
+    }
+  }
+
+  return { server, transport }
+}
+
+const handleStreamableHttpRequest = async (
+  req: Request,
+  res: Response,
+  sessions: Map<string, HttpSession>,
+) => {
+  const sessionHeader = req.headers["mcp-session-id"]
+  const sessionId = Array.isArray(sessionHeader)
+    ? sessionHeader[0]
+    : sessionHeader
+
+  let session = sessionId ? sessions.get(sessionId) : undefined
+
+  if (session) {
+    await session.transport.handleRequest(req, res, req.body)
+    return
+  }
+
+  if (req.method === "POST" && isInitializeRequest(req.body)) {
+    session = createHttpSession(sessions)
+    await session.server.connect(session.transport)
+    await session.transport.handleRequest(req, res, req.body)
+    return
+  }
+
+  res.status(400).json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Bad Request: No valid session ID provided",
+    },
+    id: null,
+  })
+}
+
+async function startStdioServer() {
+  const server = createMcpServer()
   const transport = new StdioServerTransport()
   await server.connect(transport)
   logger.info("Jenkins MCP server running on stdio")
+}
+
+async function startHttpServer() {
+  const { host, port, path } = getHttpConfig()
+  const app = createMcpExpressApp({ host })
+  const sessions = new Map<string, HttpSession>()
+
+  app.all(path, async (req, res) => {
+    try {
+      await handleStreamableHttpRequest(req, res, sessions)
+    } catch (error: any) {
+      logger.error("HTTP transport error", { error: String(error?.message || error) })
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: "Internal server error",
+          },
+          id: null,
+        })
+      }
+    }
+  })
+
+  app.listen(port, host, () => {
+    logger.info("Jenkins MCP server running on HTTP", {
+      host,
+      port,
+      path,
+      protocol: "streamable-http",
+    })
+  })
+}
+
+async function main() {
+  const transportMode = getTransportMode()
+
+  if (transportMode === "stdio") {
+    await startStdioServer()
+    return
+  }
+
+  await startHttpServer()
 }
 
 main().catch((error) => {

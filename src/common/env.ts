@@ -12,6 +12,10 @@ export interface CliArgs {
   jenkinsApiToken?: string
   jenkinsBearerToken?: string
   jenkinsAnonymous?: boolean
+  transport?: "stdio" | "http"
+  port?: number
+  host?: string
+  path?: string
 }
 
 // Store resolved configs globally to avoid re-parsing
